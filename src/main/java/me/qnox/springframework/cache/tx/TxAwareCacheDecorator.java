@@ -107,7 +107,12 @@ class TxAwareCacheDecorator implements Cache {
 
     private TxAwareCacheResourceHolder getHolder() {
         TxAwareCacheResourceHolder result;
-        if (TransactionSynchronizationManager.isSynchronizationActive() && !TransactionSynchronizationManager.hasResource(cache)) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            TxAwareCacheResourceHolder value = new TxAwareCacheResourceHolder();
+            TransactionSynchronizationManager.bindResource(cache, value);
+            result = value;
+        }
+        else if (!TransactionSynchronizationManager.hasResource(cache)) {
             TxAwareCacheResourceHolder value = new TxAwareCacheResourceHolder();
             TransactionSynchronizationManager.registerSynchronization(new ResourceHolderSynchronization<TxAwareCacheResourceHolder, Cache>(value, cache) {
                 @Override
