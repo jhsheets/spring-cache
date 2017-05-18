@@ -107,33 +107,32 @@ class TxAwareCacheDecorator implements Cache {
 
     private TxAwareCacheResourceHolder getHolder() {
         TxAwareCacheResourceHolder result;
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+        if (!TransactionSynchronizationManager.hasResource(cache)) {
             TxAwareCacheResourceHolder value = new TxAwareCacheResourceHolder();
-            TransactionSynchronizationManager.bindResource(cache, value);
-            result = value;
-        }
-        else if (!TransactionSynchronizationManager.hasResource(cache)) {
-            TxAwareCacheResourceHolder value = new TxAwareCacheResourceHolder();
-            TransactionSynchronizationManager.registerSynchronization(new ResourceHolderSynchronization<TxAwareCacheResourceHolder, Cache>(value, cache) {
-                @Override
-                protected boolean shouldReleaseBeforeCompletion() {
-                    return false;
-                }
-
-                @Override
-                protected void processResourceAfterCommit(TxAwareCacheResourceHolder resourceHolder) {
-                    Map<Object, Object> putted = resourceHolder.getPutted();
-                    for (Map.Entry<Object, Object> entry : putted.entrySet()) {
-                        cache.put(entry.getKey(), entry.getValue());
+            // If there's no active syncronization, don't try to register. Must not actually be in a transaction.
+            if (TransactionSynchronizationManager.isSynchronizationActive()) 
+            {
+                TransactionSynchronizationManager.registerSynchronization(new ResourceHolderSynchronization<TxAwareCacheResourceHolder, Cache>(value, cache) {
+                    @Override
+                    protected boolean shouldReleaseBeforeCompletion() {
+                        return false;
                     }
 
-                    Set<Object> evictedKeys = resourceHolder.getEvictedKeys();
-                    for (Object evictedKey : evictedKeys) {
-                        cache.evict(evictedKey);
-                    }
+                    @Override
+                    protected void processResourceAfterCommit(TxAwareCacheResourceHolder resourceHolder) {
+                        Map<Object, Object> putted = resourceHolder.getPutted();
+                        for (Map.Entry<Object, Object> entry : putted.entrySet()) {
+                            cache.put(entry.getKey(), entry.getValue());
+                        }
 
-                }
-            });
+                        Set<Object> evictedKeys = resourceHolder.getEvictedKeys();
+                        for (Object evictedKey : evictedKeys) {
+                            cache.evict(evictedKey);
+                        }
+
+                    }
+                });
+            }
             TransactionSynchronizationManager.bindResource(cache, value);
             result = value;
         } else {
