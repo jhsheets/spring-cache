@@ -104,11 +104,6 @@ class TxAwareCacheDecorator implements Cache {
     }
 
     @Override
-    public <T> T get(Object key, Callable<T> valueLoader) {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public void put(Object key, Object value) {
         final TxAwareCacheResourceHolder holder = getHolder();
         if (holder == null)
