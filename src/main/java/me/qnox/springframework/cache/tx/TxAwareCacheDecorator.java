@@ -63,22 +63,40 @@ class TxAwareCacheDecorator implements Cache {
 
     @Override
     public ValueWrapper get(final Object key) {
-        return getHolder().get(key, new Callable<ValueWrapper>() {
-            @Override
-            public ValueWrapper call() {
-                return cache.get(key);
-            }
-        });
+        final TxAwareCacheResourceHolder holder = getHolder();
+        if (holder == null)
+        {
+            return cache.get(key);
+        }
+        else
+        {
+            return holder.get(key, new Callable<ValueWrapper>() {
+                @Override
+                public ValueWrapper call() {
+                    return cache.get(key);
+                }
+            });
+        }
     }
 
     @Override
     public <T> T get(final Object key, Class<T> type) {
-        ValueWrapper obj = getHolder().get(key, new Callable<ValueWrapper>() {
-            @Override
-            public ValueWrapper call() {
-                return cache.get(key);
-            }
-        });
+        final TxAwareCacheResourceHolder holder = getHolder();
+        ValueWrapper obj = null;
+        if (holder == null)
+        {
+            obj = cache.get(key);
+        }
+        else
+        {
+            obj = holder.get(key, new Callable<ValueWrapper>() {
+                @Override
+                public ValueWrapper call() {
+                    return cache.get(key);
+                }
+            });
+        }
+
         if (obj == null) {
             return null;
         }
@@ -86,30 +104,76 @@ class TxAwareCacheDecorator implements Cache {
     }
 
     @Override
+    public <T> T get(Object key, Callable<T> valueLoader) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void put(Object key, Object value) {
-        getHolder().put(key, value);
+        final TxAwareCacheResourceHolder holder = getHolder();
+        if (holder == null)
+        {
+            cache.put(key, value);
+        }
+        else
+        {
+            holder.put(key, value);
+        }
     }
 
     @Override
     public ValueWrapper putIfAbsent(Object key, Object value) {
-        return getHolder().putIfAbsent(key, value, cache.get(key));
+        final TxAwareCacheResourceHolder holder = getHolder();
+        if (holder == null)
+        {
+            ValueWrapper obj = cache.get(key);
+            if (obj == null)
+            {
+                cache.put(key, value);
+                return null;
+            }
+            else
+            {
+                return obj;
+            }
+        }
+        else
+        {
+            return holder.putIfAbsent(key, value, cache.get(key));
+        }
     }
 
     @Override
     public void evict(Object key) {
-        getHolder().evict(key);
+        final TxAwareCacheResourceHolder holder = getHolder();
+        if (holder == null)
+        {
+            cache.evict(key);
+        }
+        else
+        {
+            holder.evict(key);
+        }
     }
 
     @Override
     public void clear() {
-        getHolder().clearCache();
+        final TxAwareCacheResourceHolder holder = getHolder();
+        if (holder == null)
+        {
+            cache.clear();
+        }
+        else
+        {
+            holder.clear();
+        }
     }
 
     private TxAwareCacheResourceHolder getHolder() {
         TxAwareCacheResourceHolder result;
         if (!TransactionSynchronizationManager.hasResource(cache)) {
-            TxAwareCacheResourceHolder value = new TxAwareCacheResourceHolder();
-            // If there's no active syncronization, don't try to register. Must not actually be in a transaction.
+            final TxAwareCacheResourceHolder value = new TxAwareCacheResourceHolder();
+            // If there's no active synchronization, don't try to register. Must not actually be in a transaction.
             if (TransactionSynchronizationManager.isSynchronizationActive()) 
             {
                 TransactionSynchronizationManager.registerSynchronization(new ResourceHolderSynchronization<TxAwareCacheResourceHolder, Cache>(value, cache) {
@@ -129,12 +193,15 @@ class TxAwareCacheDecorator implements Cache {
                         for (Object evictedKey : evictedKeys) {
                             cache.evict(evictedKey);
                         }
-
                     }
                 });
+                TransactionSynchronizationManager.bindResource(cache, value);
+                result = value;
             }
-            TransactionSynchronizationManager.bindResource(cache, value);
-            result = value;
+            else
+            {
+                result = null;
+            }
         } else {
             result = (TxAwareCacheResourceHolder) TransactionSynchronizationManager.getResource(cache);
         }
